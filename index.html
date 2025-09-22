@@ -3,391 +3,337 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Türkisch-Lernplattform — Schnelltest</title>
+  <title>Türkisch Lernplattform — Login & Portal</title>
   <style>
-    /* Grundstyles (kein Tailwind notwendig) */
-    :root { --bg:#f8fafc; --card:#fff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444; }
-    html,body { height:100%; }
-    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; padding:20px; background:var(--bg); color:#111827; }
-    .container { max-width:1100px; margin:0 auto; background:var(--card); padding:20px; border-radius:10px; box-shadow:0 6px 20px rgba(2,6,23,0.06); }
-    h1 { font-size:22px; margin:0 0 12px 0; }
-    h2 { margin:0 0 8px 0; font-size:18px;}
-    .controls { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
-    button { padding:8px 12px; border-radius:8px; border:1px solid #e6e9ef; background:#f3f4f6; cursor:pointer; }
-    .btnPrimary { background:var(--accent); color:white; border:none; }
-    .btnDanger { background:#fee2e2; border:none; color:var(--danger); }
-    input, textarea { padding:8px; border-radius:8px; border:1px solid #e5e7eb; font-size:14px; box-sizing:border-box; }
-    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .list { list-style:none; padding:0; margin:0; }
-    .list li { padding:10px; border:1px solid #eef2f6; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
-    .muted { color:var(--muted); font-size:13px; }
-    .small { font-size:13px; color:var(--muted); }
-    .card { background:#fff; padding:12px; border-radius:8px; border:1px solid #f1f5f9; }
-    .flex { display:flex; gap:8px; align-items:center; }
-    .stack { display:flex; flex-direction:column; gap:8px; }
-    .w-32 { width:160px; }
-    textarea { min-height:90px; }
-    @media (max-width:720px) {
-      .grid2 { grid-template-columns: 1fr; }
-    }
+    /* einfache, saubere UI (kein Tailwind nötig) */
+    :root{--bg:#f8fafc;--card:#fff;--muted:#6b7280;--accent:#0ea5a4}
+    html,body{height:100%}
+    body{font-family:Inter,system-ui,Arial;margin:0;padding:20px;background:var(--bg);color:#111827}
+    .wrap{max-width:980px;margin:0 auto}
+    .card{background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(2,6,23,.06)}
+    h1{margin:0 0 12px 0;font-size:22px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    button{padding:8px 12px;border-radius:8px;border:1px solid #e6e9ef;background:#f3f4f6;cursor:pointer}
+    .btnPrimary{background:var(--accent);color:white;border:none}
+    input,textarea{padding:8px;border-radius:8px;border:1px solid #e5e7eb;width:100%;box-sizing:border-box}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .list{list-style:none;padding:0;margin:0}
+    .list li{padding:10px;border:1px solid #eef2f6;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .muted{color:var(--muted);font-size:13px}
+    pre{background:#f8fafb;padding:8px;border-radius:6px}
+    @media (max-width:720px){.grid2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-  <div class="container" id="root"></div>
+  <div class="wrap">
+    <div id="root"></div>
+  </div>
 
-  <!-- React + ReactDOM (UMD) -->
+  <!-- React UMD + Babel (nur für schnellen Prototyp; ok für GitHub Pages demo) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <!-- Babel für JSX im Browser (nur für schnellen Prototyp) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Full app adapted from your component (no export, directly usable here)
-    function TurkishLearner() {
+    function App() {
+      const PAIRS_KEY = "tl_pairs_v2_demo";
+      const HISTORY_KEY = "tl_history_v2_demo";
+
       const [pairs, setPairs] = useState(() => {
-        try { return JSON.parse(localStorage.getItem("tl_pairs")) || []; } catch (e) { return []; }
+        try { return JSON.parse(localStorage.getItem(PAIRS_KEY)) || []; } catch { return []; }
       });
+      const [history, setHistory] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+      });
+
+      // login gate
+      const [nameInput, setNameInput] = useState("");
+      const [gate, setGate] = useState("lock"); // lock | learn | portal
+      const [message, setMessage] = useState(null);
+
+      // view state
+      const [view, setView] = useState("study"); // study | quiz | lueckentext | edit | history
+
+      // inputs
       const [turkishInput, setTurkishInput] = useState("");
       const [germanInput, setGermanInput] = useState("");
-      const [step, setStep] = useState(0); // 0 = edit, 1 = study, 2 = recall quiz, 3 = lueckentext
+      const [customText, setCustomText] = useState("");
 
-      // Quiz state
+      // quiz
       const [quizOrder, setQuizOrder] = useState([]);
       const [answers, setAnswers] = useState({});
       const [results, setResults] = useState(null);
 
-      // Lückentext state
+      // lueckentext
       const [generatedText, setGeneratedText] = useState("");
       const [blanks, setBlanks] = useState({});
-      const [customText, setCustomText] = useState("");
 
-      useEffect(() => {
-        localStorage.setItem("tl_pairs", JSON.stringify(pairs));
-      }, [pairs]);
+      useEffect(() => { localStorage.setItem(PAIRS_KEY, JSON.stringify(pairs)); }, [pairs]);
+      useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
 
-      function addPair() {
-        const t = turkishInput.trim();
-        const g = germanInput.trim();
-        if (!t || !g) return;
-        if (pairs.length >= 200) return; // safety
-        setPairs((p) => [...p, { t, g }]);
-        setTurkishInput("");
-        setGermanInput("");
+      function addHistory(type, detail={}) {
+        const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, type, detail, time: new Date().toISOString() };
+        setHistory(h => [entry, ...h].slice(0,200));
       }
+      function clearHistory(){ setHistory([]); }
 
-      function removePair(i) {
-        setPairs((p) => p.filter((_, idx) => idx !== i));
+      function addPair(){
+        const t = (turkishInput||'').trim();
+        const g = (germanInput||'').trim();
+        if(!t||!g) return;
+        setPairs(p => { const next = [...p,{t,g}]; addHistory('pair:add',{t,g,totalAfter:next.length}); return next; });
+        setTurkishInput(''); setGermanInput('');
       }
-
-      function startStudy() {
-        setStep(1);
-        setResults(null);
+      function removePair(i){
+        setPairs(p => { const removed = p[i]; const next = p.filter((_,idx)=>idx!==i); addHistory('pair:remove',{removed,totalAfter:next.length}); return next; });
       }
-
-      function startQuiz() {
-        if (pairs.length === 0) return;
-        const order = pairs.map((_, i) => i).sort(() => Math.random() - 0.5);
-        setQuizOrder(order);
-        setAnswers({});
-        setResults(null);
-        setStep(2);
+      function exportPairs(){
+        const blob = new Blob([JSON.stringify(pairs,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'turkish_pairs.json'; a.click(); URL.revokeObjectURL(url);
       }
-
-      function submitQuiz() {
-        const res = { correct: 0, total: quizOrder.length, detail: [] };
-        quizOrder.forEach((idx) => {
-          const expected = pairs[idx].t.toLowerCase();
-          const got = (answers[idx] || "").trim().toLowerCase();
-          const ok = normalize(expected) === normalize(got);
-          if (ok) res.correct++;
-          res.detail.push({ idx, expected: pairs[idx].t, got, ok });
-        });
-        setResults(res);
-      }
-
-      function normalize(s) {
-        return (s || "").replace(/\s+/g, " ").trim();
-      }
-
-      function autoGenerateLueckentext() {
-        if (pairs.length === 0) return;
-        const words = pairs.map((p) => p.t);
-        const germanFragments = [
-          "Wir sind im Urlaub und",
-          "Am Abend sitze ich am Fenster,",
-          "Du lachst leise,",
-          "Und ich denke an",
-          "Diese Erinnerung bleibt wie",
-          "Im Morgenlicht fühle ich",
-        ];
-        const pickCount = Math.min(4, words.length);
-        const picked = shuffle([...words]).slice(0, pickCount);
-        let sentences = [];
-        for (let i = 0; i < picked.length; i++) {
-          const frag = germanFragments[i % germanFragments.length];
-          sentences.push(`${frag} ${picked[i]}.`);
-        }
-        const paragraph = sentences.join(" ");
-        const mapping = {};
-        let textWithBlanks = paragraph;
-        picked.forEach((w, i) => {
-          const token = `__[${i + 1}]__`;
-          textWithBlanks = textWithBlanks.replace(w, token);
-          mapping[i + 1] = w;
-        });
-        setGeneratedText(textWithBlanks);
-        setBlanks(mapping);
-        setStep(3);
-      }
-
-      function shuffle(arr) {
-        return arr.slice().sort(() => Math.random() - 0.5);
-      }
-
-      function checkBlanks(userInputs) {
-        const detail = [];
-        let correct = 0;
-        for (const k of Object.keys(blanks)) {
-          const num = Number(k);
-          const expected = (blanks[num] || "").toLowerCase();
-          const got = (userInputs[num] || "").trim().toLowerCase();
-          const ok = normalize(expected) === normalize(got);
-          if (ok) correct++;
-          detail.push({ pos: num, expected: blanks[num], got, ok });
-        }
-        return { correct, total: Object.keys(blanks).length, detail };
-      }
-
-      function exportPairs() {
-        const payload = JSON.stringify(pairs, null, 2);
-        const blob = new Blob([payload], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "turkish_pairs.json";
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-      function importPairs(e) {
-        const f = e.target.files?.[0];
-        if (!f) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
+      function importPairs(e){
+        const f = e.target.files?.[0]; if(!f) return;
+        const r = new FileReader(); r.onload = evt => {
           try {
             const data = JSON.parse(evt.target.result);
-            if (Array.isArray(data)) setPairs(data.slice(0, 500));
-          } catch (err) {
-            alert("Fehler beim Einlesen der Datei");
-          }
-        };
-        reader.readAsText(f);
+            if(Array.isArray(data)) { setPairs(prev => { const next = [...prev,...data].slice(0,1000); addHistory('pair:import',{added:data.length,totalAfter:next.length}); return next; }); }
+          } catch { alert('Fehler beim Einlesen'); }
+        }; r.readAsText(f);
       }
 
-      return (
-        <div>
-          <h1>Türkisch Lernplattform — Prototyp</h1>
+      // login handling
+      function submitName(ev){
+        ev && ev.preventDefault();
+        const name = (nameInput||'').trim();
+        if(!name){ setMessage('Bitte einen Namen eingeben.'); return; }
+        const lower = name.toLowerCase();
+        if(lower === 'benita'){
+          setGate('learn'); setView('study'); setMessage(null); addHistory('login',{name:'Benita'});
+        } else if(lower === 'tanzen'){
+          setGate('portal'); setView('edit'); setMessage(null); addHistory('login',{name:'Tanzen (Portal)'});}
+        else {
+          setMessage(`Hm — "${name}" ist falsch. Versuch's nochmal oder gib 'Tanzen' ein für das Portal.` );
+        }
+      }
 
-          <div className="controls">
-            <button onClick={() => setStep(0)} className={step === 0 ? "btnPrimary" : ""}>Editieren</button>
-            <button onClick={startStudy} className={step === 1 ? "btnPrimary" : ""}>Lernen</button>
-            <button onClick={startQuiz} className={step === 2 ? "btnPrimary" : ""}>Abfrage</button>
-            <button onClick={autoGenerateLueckentext} className={step === 3 ? "btnPrimary" : ""}>Lückentext (Auto)</button>
+      function logout(){ setNameInput(''); setGate('lock'); setView('study'); setMessage(null); }
+
+      // study -> quiz
+      function startQuiz(){
+        if(pairs.length===0) return alert('Keine Wörter vorhanden.');
+        const order = pairs.map((_,i)=>i).sort(()=>Math.random()-0.5);
+        setQuizOrder(order); setAnswers({}); setResults(null); setView('quiz'); addHistory('quiz:start',{count:pairs.length});
+      }
+      function submitQuiz(){
+        const res = { correct:0, total: quizOrder.length, detail: [] };
+        quizOrder.forEach(idx=>{
+          const exp = (pairs[idx].t||'').toLowerCase();
+          const got = (answers[idx]||'').trim().toLowerCase();
+          const ok = exp === got;
+          if(ok) res.correct++;
+          res.detail.push({ idx, expected: pairs[idx].t, got, ok });
+        });
+        setResults(res); addHistory('quiz:finish',{correct:res.correct,total:res.total,pct: Math.round((res.correct/res.total)*100)});
+      }
+
+      // lueckentext
+      function autoGenerateLueckentext(){
+        if(pairs.length===0) return alert('Keine Wörter vorhanden.');
+        const words = pairs.map(p=>p.t);
+        const germanFragments = ['Wir sind im Urlaub und','Am Abend sitze ich am Fenster,','Du lachst leise,','Und ich denke an','Diese Erinnerung bleibt wie','Im Morgenlicht fühle ich'];
+        const pickCount = Math.min(4, words.length);
+        const picked = shuffle([...words]).slice(0,pickCount);
+        const sentences = picked.map((w,i)=> `${germanFragments[i % germanFragments.length]} ${w}.`);
+        const paragraph = sentences.join(' ');
+        const mapping = {}; let text = paragraph;
+        picked.forEach((w,i)=>{ const token = `__[${i+1}]__`; text = text.replace(w, token); mapping[i+1]=w; });
+        setGeneratedText(text); setBlanks(mapping); setView('lueckentext'); addHistory('lueckentext:generate',{picked});
+      }
+      function parseCustomToBlanks(){
+        const regex = /{{\s*([^}]+?)\s*}}/g;
+        const map = {}; let m; let i=1; let newText = customText;
+        while((m=regex.exec(customText))!==null){ map[i]=m[1]; newText = newText.replace(m[0], `__[${i}]__`); i++; }
+        if(Object.keys(map).length===0){ alert('Keine Platzhalter {{...}} gefunden.'); return; }
+        setGeneratedText(newText); setBlanks(map); setView('lueckentext'); addHistory('lueckentext:custom',{placeholders:Object.keys(map).length});
+      }
+      function checkBlanks(userInputs){
+        let correct=0; const detail=[];
+        for(const k of Object.keys(blanks)){ const expected=(blanks[k]||'').toLowerCase(); const got=(userInputs[k]||'').trim().toLowerCase(); const ok = expected===got; if(ok) correct++; detail.push({pos:k,expected:blanks[k],got,ok}); }
+        addHistory('lueckentext:check',{correct,total:Object.keys(blanks).length}); return {correct,total:Object.keys(blanks).length,detail};
+      }
+
+      function shuffle(a){ return a.slice().sort(()=>Math.random()-0.5); }
+
+      // small components
+      function LueckentextBlock({text, blanks, onCheck}) {
+        const [user, setUser] = useState({});
+        function change(k,v){ setUser(u=>({...u,[k]:v})); }
+        function doCheck(){ const res = checkBlanks(user); onCheck(res); }
+        const pieces = text.split(/(__\\[\\d+\\]__)/g).filter(Boolean);
+        return (
+          <div>
+            <p style={{padding:12, border:'1px solid #eef2ff', borderRadius:8, background:'#fbfdff'}}>
+              {pieces.map((pc,i)=>{ const m = pc.match(/__\\[(\\d+)\\]__/); if(m){ const id = m[1]; return <span key={i} style={{marginRight:6}}><input placeholder={`[${id}]`} value={user[id]||''} onChange={e=>change(id,e.target.value)} /></span>; } return <span key={i}>{pc} </span>; })}
+            </p>
+            <div style={{marginTop:8}}><button className='btnPrimary' onClick={doCheck}>Prüfen</button></div>
+          </div>
+        );
+      }
+
+      // render: gate
+      if(gate === 'lock'){
+        return (
+          <div className="card" style={{marginTop:20}}>
+            <h1>Türkisch Portal — Zugang</h1>
+            <form onSubmit={submitName} style={{marginTop:12}}>
+              <input placeholder="Name eingeben (z. B. Benita oder Tanzen)" value={nameInput} onChange={e=>setNameInput(e.target.value)} />
+              <div style={{marginTop:10, display:'flex', gap:8}}>
+                <button type="submit" className="btnPrimary">Weiter</button>
+                <button type="button" onClick={()=>{ setNameInput('Benita'); submitName(); }}>Demo (Benita)</button>
+              </div>
+              {message && <div style={{marginTop:10, padding:10, background:'#fff1f2', color:'#881b1b', borderRadius:8}}>{message}</div>}
+              <div style={{marginTop:8, color:'#6b7280'}}>Hinweis: das ist ein Demo-Gate, kein echtes Login.</div>
+            </form>
+          </div>
+        );
+      }
+
+      // main UI (learn or portal share same UI; portal uses 'edit' primarily)
+      return (
+        <div style={{marginTop:20}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+            <div>
+              <h1>Türkisch Lernplattform</h1>
+              <div style={{color:'#6b7280'}}>Angemeldet: <strong>{nameInput}</strong></div>
+            </div>
+            <div style={{display:'flex', gap:8}}>
+              <button onClick={()=>{ logout(); }}>Logout</button>
+              <button onClick={()=>setView('history')}>History ({history.length})</button>
+            </div>
           </div>
 
-          {step === 0 && (
-            <section className="card">
-              <div className="grid2" style={{ marginBottom: 12 }}>
-                <input
-                  placeholder="Türkisch (z.B. merhaba)"
-                  value={turkishInput}
-                  onChange={(e) => setTurkishInput(e.target.value)}
-                />
-                <input
-                  placeholder="Deutsch (z.B. Hallo)"
-                  value={germanInput}
-                  onChange={(e) => setGermanInput(e.target.value)}
-                />
-              </div>
+          <div className="card">
+            <div className="controls" style={{marginBottom:12}}>
+              <button onClick={()=>setView('study')} className={view==='study'?'btnPrimary':''}>Lernen</button>
+              <button onClick={startQuiz} className={view==='quiz'?'btnPrimary':''}>Abfrage</button>
+              <button onClick={autoGenerateLueckentext} className={view==='lueckentext'?'btnPrimary':''}>Lückentext</button>
+              <button onClick={()=>setView('edit')} className={view==='edit'?'btnPrimary':''}>Wörter bearbeiten</button>
+            </div>
 
-              <div className="flex" style={{ marginBottom: 12 }}>
-                <button onClick={addPair} className="btnPrimary">Hinzufügen</button>
-                <button onClick={() => { setPairs([]); }} className="btnDanger">Alle löschen</button>
-                <button onClick={exportPairs}>Export</button>
-                <label style={{ padding: "8px 12px", borderRadius: 8, background: "#fde68a", cursor: "pointer" }}>
-                  Import
-                  <input type="file" accept="application/json" onChange={importPairs} style={{ display: "none" }} />
-                </label>
-              </div>
-
+            {view==='edit' && (
               <div>
-                <h3 style={{ margin: "0 0 8px 0" }}>Wortliste ({pairs.length})</h3>
-                <ul className="list">
-                  {pairs.map((p, i) => (
+                <h3>Wörter hinzufügen / editieren</h3>
+                <div className="grid2" style={{marginTop:8, marginBottom:8}}>
+                  <input placeholder="Türkisch (z.B. merhaba)" value={turkishInput} onChange={e=>setTurkishInput(e.target.value)} />
+                  <input placeholder="Deutsch (z.B. Hallo)" value={germanInput} onChange={e=>setGermanInput(e.target.value)} />
+                </div>
+                <div style={{display:'flex', gap:8, marginBottom:12}}>
+                  <button className='btnPrimary' onClick={addPair}>Hinzufügen</button>
+                  <button onClick={()=>{ setPairs([]); addHistory('pair:clear',{}); }}>Alle löschen</button>
+                  <button onClick={exportPairs}>Export</button>
+                  <label style={{padding:8, background:'#fde68a', borderRadius:8, cursor:'pointer'}}>Import
+                    <input type="file" accept="application/json" onChange={importPairs} style={{display:'none'}} />
+                  </label>
+                </div>
+
+                <h4>Wortliste ({pairs.length})</h4>
+                <ul className="list" style={{marginTop:8}}>
+                  {pairs.map((p,i)=>(
                     <li key={i}>
-                      <div>
-                        <strong>{p.t}</strong> <span className="muted">— {p.g}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => navigator.clipboard?.writeText(p.t)}>Kopieren</button>
-                        <button onClick={() => removePair(i)}>Löschen</button>
+                      <div><strong>{p.t}</strong> <span className="muted">— {p.g}</span></div>
+                      <div style={{display:'flex', gap:8}}>
+                        <button onClick={()=>navigator.clipboard?.writeText(p.t)}>Kopieren</button>
+                        <button onClick={()=>removePair(i)}>Löschen</button>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <p className="small" style={{ marginTop: 8 }}>Hinweis: Lokaler Speicher wird verwendet. Du kannst die Liste exportieren/importieren.</p>
               </div>
-            </section>
-          )}
+            )}
 
-          {step === 1 && (
-            <section className="card">
-              <h2>Lerne die Liste</h2>
-              <p className="small">Lies die Paare durch und klicke "Abfrage" wenn du bereit bist.</p>
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 8 }}>
-                {pairs.map((p, i) => (
-                  <div key={i} className="card" style={{ padding: 8 }}>{p.t} — {p.g}</div>
-                ))}
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <button onClick={startQuiz} className="btnPrimary">Starte Abfrage</button>
-              </div>
-            </section>
-          )}
-
-          {step === 2 && (
-            <section className="card">
-              <h2>Abfrage — schreibe das Türkische Wort</h2>
-              <p className="small">Gib die türkische Übersetzung für das deutsche Wort ein.</p>
-
-              <div style={{ marginTop: 8 }}>
-                {quizOrder.map((idx) => (
-                  <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                    <div className="w-32">{pairs[idx].g}</div>
-                    <input
-                      style={{ flex: 1 }}
-                      value={answers[idx] || ""}
-                      onChange={(e) => setAnswers((a) => ({ ...a, [idx]: e.target.value }))}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                <button onClick={submitQuiz} className="btnPrimary">Prüfen</button>
-                <button onClick={() => { setStep(1); setResults(null); }}>Zurück</button>
-              </div>
-
-              {results && (
-                <div style={{ marginTop: 12 }}>
-                  <div>Ergebnis: {results.correct} / {results.total}</div>
-                  <ul style={{ marginTop: 8 }}>
-                    {results.detail.map((d, i) => (
-                      <li key={i} style={{ padding: 8, borderRadius: 6, background: d.ok ? "#ecfdf5" : "#fff1f2", marginBottom: 6 }}>
-                        <strong>{pairs[d.idx].g}</strong> — Erwartet: {d.expected} | Du: {d.got} {d.ok ? "✅" : "❌"}
-                      </li>
-                    ))}
-                  </ul>
+            {view==='study' && (
+              <div>
+                <h3>Lerne die Liste</h3>
+                <p className="muted">Lies die Paare durch. Starte eine Abfrage, wenn du bereit bist.</p>
+                <div style={{marginTop:10, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:8}}>
+                  {pairs.map((p,i)=>(<div key={i} style={{padding:8,border:'1px solid #eef2f6',borderRadius:6}}>{p.t} — {p.g}</div>))}
                 </div>
-              )}
-            </section>
-          )}
-
-          {step === 3 && (
-            <section className="card">
-              <h2>Lückentext</h2>
-              <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
-                <button onClick={autoGenerateLueckentext}>Neu generieren</button>
-                <button onClick={() => { setCustomText(""); setBlanks({}); setGeneratedText(""); setStep(0); }}>Zurück</button>
+                <div style={{marginTop:12}}><button className='btnPrimary' onClick={startQuiz}>Starte Abfrage</button></div>
               </div>
+            )}
 
-              {generatedText ? (
-                <LueckentextBlock text={generatedText} blanks={blanks} onCheck={(res) => alert(`Ergebnis ${res.correct}/${res.total}`)} />
-              ) : (
-                <div className="small">Kein Text generiert.</div>
-              )}
+            {view==='quiz' && (
+              <div>
+                <h3>Abfrage — schreibe das Türkische Wort</h3>
+                <div style={{marginTop:8}}>
+                  {quizOrder.map(idx=>(
+                    <div key={idx} style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
+                      <div style={{width:160}}>{pairs[idx].g}</div>
+                      <input value={answers[idx]||''} onChange={e=>setAnswers(a=>({...a,[idx]:e.target.value}))} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:10, display:'flex', gap:8}}>
+                  <button className='btnPrimary' onClick={submitQuiz}>Prüfen</button>
+                  <button onClick={()=>{ setView('study'); setResults(null); }}>Zurück</button>
+                </div>
+                {results && <div style={{marginTop:12,padding:10,borderRadius:8, background: results.correct===results.total? '#ecfdf5' : '#fff1f2' }}>
+                  Ergebnis: {results.correct} / {results.total}
+                  <ul style={{marginTop:8}}>{results.detail.map((d,i)=>(
+                    <li key={i} style={{marginBottom:6}}><strong>{pairs[d.idx].g}</strong> — Erwartet: {d.expected} | Du: {d.got} {d.ok?'✅':'❌'}</li>
+                  ))}</ul>
+                </div>}
+              </div>
+            )}
 
-              <div style={{ marginTop: 12 }}>
-                <h3>Oder: eigenen Text schreiben</h3>
-                <p className="small">Schreibe einen Text und markiere die türkischen Wörter mit doppelten geschweiften Klammern, z. B. "Ich sehe {{merhaba}} am Strand."</p>
-                <textarea value={customText} onChange={(e) => setCustomText(e.target.value)} />
-                <div style={{ marginTop: 8 }}>
-                  <button className="btnPrimary" onClick={() => {
-                    const regex = /{{\s*([^}]+?)\s*}}/g;
-                    const map = {};
-                    let m; let i = 1;
-                    let newText = customText;
-                    while ((m = regex.exec(customText)) !== null) {
-                      map[i] = m[1];
-                      newText = newText.replace(m[0], `__[${i}]__`);
-                      i++;
-                    }
-                    if (Object.keys(map).length === 0) {
-                      alert('Keine Platzhalter {{...}} gefunden.');
-                      return;
-                    }
-                    setGeneratedText(newText);
-                    setBlanks(map);
-                    setStep(3);
-                  }}>Aus Text Lückentext machen</button>
+            {view==='lueckentext' && (
+              <div>
+                <h3>Lückentext</h3>
+                <div style={{display:'flex', gap:8, marginBottom:10}}>
+                  <button onClick={autoGenerateLueckentext}>Neu generieren</button>
+                  <button onClick={()=>{ setCustomText(''); setGeneratedText(''); setBlanks({}); setView('edit'); }}>Zurück</button>
+                </div>
+                {generatedText ? <LueckentextBlock text={generatedText} blanks={blanks} onCheck={res=>alert(`Ergebnis ${res.correct}/${res.total}`)} /> : <div className='muted'>Kein Text generiert.</div>}
+                <div style={{marginTop:12}}>
+                  <h4>Oder: eigenen Text schreiben</h4>
+                  <p className='muted'>Markiere türkische Wörter mit {{wort}} — z. B. Ich sehe {{merhaba}} am Strand.</p>
+                  <textarea value={customText} onChange={e=>setCustomText(e.target.value)} style={{width:'100%',minHeight:80}} />
+                  <div style={{marginTop:8}}><button className='btnPrimary' onClick={parseCustomToBlanks}>Aus Text Lückentext machen</button></div>
                 </div>
               </div>
-            </section>
-          )}
+            )}
 
-          <footer style={{ marginTop: 16 }} className="small">Prototype — lokal gespeicherte Wortliste (localStorage). Export/Import möglich.</footer>
-        </div>
-      );
-    }
+            {view==='history' && (
+              <div>
+                <h3>Historische Lern-Einheiten</h3>
+                <div style={{marginTop:8}}>
+                  {history.length===0 && <div className='muted'>Keine Einträge.</div>}
+                  {history.map(h=>(
+                    <div key={h.id} style={{padding:8,border:'1px solid #eef2f6',borderRadius:8, marginBottom:8, display:'flex', justifyContent:'space-between'}}>
+                      <div>
+                        <div><strong>{h.type}</strong> <span className='muted'>— {new Date(h.time).toLocaleString()}</span></div>
+                        <pre style={{margin:6,fontSize:12,whiteSpace:'pre-wrap'}}>{JSON.stringify(h.detail)}</pre>
+                      </div>
+                      <div className='muted'>{new Date(h.time).toLocaleTimeString()}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:10,display:'flex',gap:8}}>
+                  <button onClick={()=>clearHistory()}>History löschen</button>
+                  <button onClick={()=>setView('study')}>Zurück</button>
+                </div>
+              </div>
+            )}
 
-    function LueckentextBlock({ text, blanks, onCheck }) {
-      const [user, setUser] = useState({});
-
-      function handleChange(i, val) {
-        setUser((u) => ({ ...u, [i]: val }));
-      }
-
-      function doCheck() {
-        const res = { correct: 0, total: Object.keys(blanks).length };
-        for (const k of Object.keys(blanks)) {
-          if ((user[k] || "").trim().toLowerCase() === (blanks[k] || "").trim().toLowerCase()) res.correct++;
-        }
-        onCheck(res);
-      }
-
-      const pieces = text.split(/(__\[\d+\]__)/g).filter(Boolean);
-
-      return (
-        <div>
-          <p style={{ padding: 12, borderRadius: 8, background: "#fbfdff", border: "1px solid #eef2ff" }}>
-            {pieces.map((pc, i) => {
-              const m = pc.match(/__\[(\d+)\]__/);
-              if (m) {
-                const id = m[1];
-                return (
-                  <span key={i} style={{ marginRight: 6 }}>
-                    <input
-                      placeholder={`[${id}]`}
-                      value={user[id] || ""}
-                      onChange={(e) => handleChange(id, e.target.value)}
-                    />
-                  </span>
-                );
-              }
-              return <span key={i}>{pc} </span>;
-            })}
-          </p>
-          <div style={{ marginTop: 8 }}>
-            <button className="btnPrimary" onClick={doCheck}>Prüfen</button>
           </div>
+
         </div>
       );
     }
 
     // Mount
-    ReactDOM.createRoot(document.getElementById("root")).render(<TurkishLearner />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>
 </body>
 </html>
