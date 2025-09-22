@@ -1,339 +1,229 @@
-<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Türkisch Lernplattform — Login & Portal</title>
-  <style>
-    /* einfache, saubere UI (kein Tailwind nötig) */
-    :root{--bg:#f8fafc;--card:#fff;--muted:#6b7280;--accent:#0ea5a4}
-    html,body{height:100%}
-    body{font-family:Inter,system-ui,Arial;margin:0;padding:20px;background:var(--bg);color:#111827}
-    .wrap{max-width:980px;margin:0 auto}
-    .card{background:#fff;padding:18px;border-radius:10px;box-shadow:0 6px 20px rgba(2,6,23,.06)}
-    h1{margin:0 0 12px 0;font-size:22px}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-    button{padding:8px 12px;border-radius:8px;border:1px solid #e6e9ef;background:#f3f4f6;cursor:pointer}
-    .btnPrimary{background:var(--accent);color:white;border:none}
-    input,textarea{padding:8px;border-radius:8px;border:1px solid #e5e7eb;width:100%;box-sizing:border-box}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .list{list-style:none;padding:0;margin:0}
-    .list li{padding:10px;border:1px solid #eef2f6;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
-    .muted{color:var(--muted);font-size:13px}
-    pre{background:#f8fafb;padding:8px;border-radius:6px}
-    @media (max-width:720px){.grid2{grid-template-columns:1fr}}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div id="root"></div>
-  </div>
+import React, { useState, useEffect } from "react";
 
-  <!-- React UMD + Babel (nur für schnellen Prototyp; ok für GitHub Pages demo) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+// Türkisch-Lernplattform — Single-file React (Portal hidden behind "Tanzen")
+// - Secret editor (Tanzen) to prepare a unit: add words, create Lückentext, publish unit.
+// - Student (Benita) sees only the latest published unit (today's unit) with words + Lückentext.
+// - Save units and history to localStorage. When Benita completes the Lückentext correctly, show a celebration and mark the unit completed.
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+export default function TurkishLearner() {
+  const UNITS_KEY = "tl_units_v1";
+  const HISTORY_KEY = "tl_history_v1";
 
-    function App() {
-      const PAIRS_KEY = "tl_pairs_v2_demo";
-      const HISTORY_KEY = "tl_history_v2_demo";
+  const [units, setUnits] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(UNITS_KEY)) || []; } catch { return []; }
+  });
+  const [history, setHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+  });
 
-      const [pairs, setPairs] = useState(() => {
-        try { return JSON.parse(localStorage.getItem(PAIRS_KEY)) || []; } catch { return []; }
-      });
-      const [history, setHistory] = useState(() => {
-        try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
-      });
+  const [nameInput, setNameInput] = useState("");
+  const [gate, setGate] = useState("lock"); // 'lock' | 'student' | 'portal'
+  const [message, setMessage] = useState("");
 
-      // login gate
-      const [nameInput, setNameInput] = useState("");
-      const [gate, setGate] = useState("lock"); // lock | learn | portal
-      const [message, setMessage] = useState(null);
+  // Portal editor state
+  const [editorUnitName, setEditorUnitName] = useState("Einheit 1");
+  const [editorWords, setEditorWords] = useState([]); // [{t,g}]
+  const [editorTurkish, setEditorTurkish] = useState("");
+  const [editorGerman, setEditorGerman] = useState("");
+  const [editorLueckentext, setEditorLueckentext] = useState("");
+  const [editorBlanks, setEditorBlanks] = useState({});
 
-      // view state
-      const [view, setView] = useState("study"); // study | quiz | lueckentext | edit | history
+  // Student state
+  const [currentUnitId, setCurrentUnitId] = useState(null);
+  const [lueckentextUser, setLueckentextUser] = useState({});
+  const [celebrate, setCelebrate] = useState(false);
 
-      // inputs
-      const [turkishInput, setTurkishInput] = useState("");
-      const [germanInput, setGermanInput] = useState("");
-      const [customText, setCustomText] = useState("");
+  useEffect(() => { localStorage.setItem(UNITS_KEY, JSON.stringify(units)); }, [units]);
+  useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
 
-      // quiz
-      const [quizOrder, setQuizOrder] = useState([]);
-      const [answers, setAnswers] = useState({});
-      const [results, setResults] = useState(null);
+  function addHistory(type, detail = {}) {
+    const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2,6)}`, type, detail, time: new Date().toISOString() };
+    setHistory(h => [entry, ...h].slice(0,200));
+  }
 
-      // lueckentext
-      const [generatedText, setGeneratedText] = useState("");
-      const [blanks, setBlanks] = useState({});
-
-      useEffect(() => { localStorage.setItem(PAIRS_KEY, JSON.stringify(pairs)); }, [pairs]);
-      useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
-
-      function addHistory(type, detail={}) {
-        const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, type, detail, time: new Date().toISOString() };
-        setHistory(h => [entry, ...h].slice(0,200));
+  // Login gate
+  function submitName(e) {
+    e && e.preventDefault();
+    const name = (nameInput || "").trim();
+    if (!name) { setMessage("Bitte Namen eingeben."); return; }
+    const lower = name.toLowerCase();
+    if (lower === "benita") {
+      setGate("student"); setMessage("");
+      const published = units.filter(u => u.published).sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
+      if (published.length) setCurrentUnitId(published[0].id);
+      addHistory('login', { name: 'Benita' });
+    } else if (lower === "tanzen") {
+      setGate("portal"); setMessage(""); addHistory('login', { name: 'Tanzen (portal)' });
+      const draft = units.find(u => !u.published) || null;
+      if (draft) {
+        setEditorUnitName(draft.name || 'Einheit-Entwurf');
+        setEditorWords(draft.words || []);
+        setEditorLueckentext(draft.lueckentext || '');
+        setEditorBlanks(draft.blanks || {});
+      } else {
+        setEditorUnitName('Einheit 1'); setEditorWords([]); setEditorLueckentext(''); setEditorBlanks({});
       }
-      function clearHistory(){ setHistory([]); }
-
-      function addPair(){
-        const t = (turkishInput||'').trim();
-        const g = (germanInput||'').trim();
-        if(!t||!g) return;
-        setPairs(p => { const next = [...p,{t,g}]; addHistory('pair:add',{t,g,totalAfter:next.length}); return next; });
-        setTurkishInput(''); setGermanInput('');
-      }
-      function removePair(i){
-        setPairs(p => { const removed = p[i]; const next = p.filter((_,idx)=>idx!==i); addHistory('pair:remove',{removed,totalAfter:next.length}); return next; });
-      }
-      function exportPairs(){
-        const blob = new Blob([JSON.stringify(pairs,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'turkish_pairs.json'; a.click(); URL.revokeObjectURL(url);
-      }
-      function importPairs(e){
-        const f = e.target.files?.[0]; if(!f) return;
-        const r = new FileReader(); r.onload = evt => {
-          try {
-            const data = JSON.parse(evt.target.result);
-            if(Array.isArray(data)) { setPairs(prev => { const next = [...prev,...data].slice(0,1000); addHistory('pair:import',{added:data.length,totalAfter:next.length}); return next; }); }
-          } catch { alert('Fehler beim Einlesen'); }
-        }; r.readAsText(f);
-      }
-
-      // login handling
-      function submitName(ev){
-        ev && ev.preventDefault();
-        const name = (nameInput||'').trim();
-        if(!name){ setMessage('Bitte einen Namen eingeben.'); return; }
-        const lower = name.toLowerCase();
-        if(lower === 'benita'){
-          setGate('learn'); setView('study'); setMessage(null); addHistory('login',{name:'Benita'});
-        } else if(lower === 'tanzen'){
-          setGate('portal'); setView('edit'); setMessage(null); addHistory('login',{name:'Tanzen (Portal)'});}
-        else {
-          setMessage(`Hm — "${name}" ist falsch. Versuch's nochmal oder gib 'Tanzen' ein für das Portal.` );
-        }
-      }
-
-      function logout(){ setNameInput(''); setGate('lock'); setView('study'); setMessage(null); }
-
-      // study -> quiz
-      function startQuiz(){
-        if(pairs.length===0) return alert('Keine Wörter vorhanden.');
-        const order = pairs.map((_,i)=>i).sort(()=>Math.random()-0.5);
-        setQuizOrder(order); setAnswers({}); setResults(null); setView('quiz'); addHistory('quiz:start',{count:pairs.length});
-      }
-      function submitQuiz(){
-        const res = { correct:0, total: quizOrder.length, detail: [] };
-        quizOrder.forEach(idx=>{
-          const exp = (pairs[idx].t||'').toLowerCase();
-          const got = (answers[idx]||'').trim().toLowerCase();
-          const ok = exp === got;
-          if(ok) res.correct++;
-          res.detail.push({ idx, expected: pairs[idx].t, got, ok });
-        });
-        setResults(res); addHistory('quiz:finish',{correct:res.correct,total:res.total,pct: Math.round((res.correct/res.total)*100)});
-      }
-
-      // lueckentext
-      function autoGenerateLueckentext(){
-        if(pairs.length===0) return alert('Keine Wörter vorhanden.');
-        const words = pairs.map(p=>p.t);
-        const germanFragments = ['Wir sind im Urlaub und','Am Abend sitze ich am Fenster,','Du lachst leise,','Und ich denke an','Diese Erinnerung bleibt wie','Im Morgenlicht fühle ich'];
-        const pickCount = Math.min(4, words.length);
-        const picked = shuffle([...words]).slice(0,pickCount);
-        const sentences = picked.map((w,i)=> `${germanFragments[i % germanFragments.length]} ${w}.`);
-        const paragraph = sentences.join(' ');
-        const mapping = {}; let text = paragraph;
-        picked.forEach((w,i)=>{ const token = `__[${i+1}]__`; text = text.replace(w, token); mapping[i+1]=w; });
-        setGeneratedText(text); setBlanks(mapping); setView('lueckentext'); addHistory('lueckentext:generate',{picked});
-      }
-      function parseCustomToBlanks(){
-        const regex = /{{\s*([^}]+?)\s*}}/g;
-        const map = {}; let m; let i=1; let newText = customText;
-        while((m=regex.exec(customText))!==null){ map[i]=m[1]; newText = newText.replace(m[0], `__[${i}]__`); i++; }
-        if(Object.keys(map).length===0){ alert('Keine Platzhalter {{...}} gefunden.'); return; }
-        setGeneratedText(newText); setBlanks(map); setView('lueckentext'); addHistory('lueckentext:custom',{placeholders:Object.keys(map).length});
-      }
-      function checkBlanks(userInputs){
-        let correct=0; const detail=[];
-        for(const k of Object.keys(blanks)){ const expected=(blanks[k]||'').toLowerCase(); const got=(userInputs[k]||'').trim().toLowerCase(); const ok = expected===got; if(ok) correct++; detail.push({pos:k,expected:blanks[k],got,ok}); }
-        addHistory('lueckentext:check',{correct,total:Object.keys(blanks).length}); return {correct,total:Object.keys(blanks).length,detail};
-      }
-
-      function shuffle(a){ return a.slice().sort(()=>Math.random()-0.5); }
-
-      // small components
-      function LueckentextBlock({text, blanks, onCheck}) {
-        const [user, setUser] = useState({});
-        function change(k,v){ setUser(u=>({...u,[k]:v})); }
-        function doCheck(){ const res = checkBlanks(user); onCheck(res); }
-        const pieces = text.split(/(__\\[\\d+\\]__)/g).filter(Boolean);
-        return (
-          <div>
-            <p style={{padding:12, border:'1px solid #eef2ff', borderRadius:8, background:'#fbfdff'}}>
-              {pieces.map((pc,i)=>{ const m = pc.match(/__\\[(\\d+)\\]__/); if(m){ const id = m[1]; return <span key={i} style={{marginRight:6}}><input placeholder={`[${id}]`} value={user[id]||''} onChange={e=>change(id,e.target.value)} /></span>; } return <span key={i}>{pc} </span>; })}
-            </p>
-            <div style={{marginTop:8}}><button className='btnPrimary' onClick={doCheck}>Prüfen</button></div>
-          </div>
-        );
-      }
-
-      // render: gate
-      if(gate === 'lock'){
-        return (
-          <div className="card" style={{marginTop:20}}>
-            <h1>Türkisch Portal — Zugang</h1>
-            <form onSubmit={submitName} style={{marginTop:12}}>
-              <input placeholder="Name eingeben (z. B. Benita oder Tanzen)" value={nameInput} onChange={e=>setNameInput(e.target.value)} />
-              <div style={{marginTop:10, display:'flex', gap:8}}>
-                <button type="submit" className="btnPrimary">Weiter</button>
-                <button type="button" onClick={()=>{ setNameInput('Benita'); submitName(); }}>Demo (Benita)</button>
-              </div>
-              {message && <div style={{marginTop:10, padding:10, background:'#fff1f2', color:'#881b1b', borderRadius:8}}>{message}</div>}
-              <div style={{marginTop:8, color:'#6b7280'}}>Hinweis: das ist ein Demo-Gate, kein echtes Login.</div>
-            </form>
-          </div>
-        );
-      }
-
-      // main UI (learn or portal share same UI; portal uses 'edit' primarily)
-      return (
-        <div style={{marginTop:20}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
-            <div>
-              <h1>Türkisch Lernplattform</h1>
-              <div style={{color:'#6b7280'}}>Angemeldet: <strong>{nameInput}</strong></div>
-            </div>
-            <div style={{display:'flex', gap:8}}>
-              <button onClick={()=>{ logout(); }}>Logout</button>
-              <button onClick={()=>setView('history')}>History ({history.length})</button>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="controls" style={{marginBottom:12}}>
-              <button onClick={()=>setView('study')} className={view==='study'?'btnPrimary':''}>Lernen</button>
-              <button onClick={startQuiz} className={view==='quiz'?'btnPrimary':''}>Abfrage</button>
-              <button onClick={autoGenerateLueckentext} className={view==='lueckentext'?'btnPrimary':''}>Lückentext</button>
-              <button onClick={()=>setView('edit')} className={view==='edit'?'btnPrimary':''}>Wörter bearbeiten</button>
-            </div>
-
-            {view==='edit' && (
-              <div>
-                <h3>Wörter hinzufügen / editieren</h3>
-                <div className="grid2" style={{marginTop:8, marginBottom:8}}>
-                  <input placeholder="Türkisch (z.B. merhaba)" value={turkishInput} onChange={e=>setTurkishInput(e.target.value)} />
-                  <input placeholder="Deutsch (z.B. Hallo)" value={germanInput} onChange={e=>setGermanInput(e.target.value)} />
-                </div>
-                <div style={{display:'flex', gap:8, marginBottom:12}}>
-                  <button className='btnPrimary' onClick={addPair}>Hinzufügen</button>
-                  <button onClick={()=>{ setPairs([]); addHistory('pair:clear',{}); }}>Alle löschen</button>
-                  <button onClick={exportPairs}>Export</button>
-                  <label style={{padding:8, background:'#fde68a', borderRadius:8, cursor:'pointer'}}>Import
-                    <input type="file" accept="application/json" onChange={importPairs} style={{display:'none'}} />
-                  </label>
-                </div>
-
-                <h4>Wortliste ({pairs.length})</h4>
-                <ul className="list" style={{marginTop:8}}>
-                  {pairs.map((p,i)=>(
-                    <li key={i}>
-                      <div><strong>{p.t}</strong> <span className="muted">— {p.g}</span></div>
-                      <div style={{display:'flex', gap:8}}>
-                        <button onClick={()=>navigator.clipboard?.writeText(p.t)}>Kopieren</button>
-                        <button onClick={()=>removePair(i)}>Löschen</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {view==='study' && (
-              <div>
-                <h3>Lerne die Liste</h3>
-                <p className="muted">Lies die Paare durch. Starte eine Abfrage, wenn du bereit bist.</p>
-                <div style={{marginTop:10, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:8}}>
-                  {pairs.map((p,i)=>(<div key={i} style={{padding:8,border:'1px solid #eef2f6',borderRadius:6}}>{p.t} — {p.g}</div>))}
-                </div>
-                <div style={{marginTop:12}}><button className='btnPrimary' onClick={startQuiz}>Starte Abfrage</button></div>
-              </div>
-            )}
-
-            {view==='quiz' && (
-              <div>
-                <h3>Abfrage — schreibe das Türkische Wort</h3>
-                <div style={{marginTop:8}}>
-                  {quizOrder.map(idx=>(
-                    <div key={idx} style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
-                      <div style={{width:160}}>{pairs[idx].g}</div>
-                      <input value={answers[idx]||''} onChange={e=>setAnswers(a=>({...a,[idx]:e.target.value}))} />
-                    </div>
-                  ))}
-                </div>
-                <div style={{marginTop:10, display:'flex', gap:8}}>
-                  <button className='btnPrimary' onClick={submitQuiz}>Prüfen</button>
-                  <button onClick={()=>{ setView('study'); setResults(null); }}>Zurück</button>
-                </div>
-                {results && <div style={{marginTop:12,padding:10,borderRadius:8, background: results.correct===results.total? '#ecfdf5' : '#fff1f2' }}>
-                  Ergebnis: {results.correct} / {results.total}
-                  <ul style={{marginTop:8}}>{results.detail.map((d,i)=>(
-                    <li key={i} style={{marginBottom:6}}><strong>{pairs[d.idx].g}</strong> — Erwartet: {d.expected} | Du: {d.got} {d.ok?'✅':'❌'}</li>
-                  ))}</ul>
-                </div>}
-              </div>
-            )}
-
-            {view==='lueckentext' && (
-              <div>
-                <h3>Lückentext</h3>
-                <div style={{display:'flex', gap:8, marginBottom:10}}>
-                  <button onClick={autoGenerateLueckentext}>Neu generieren</button>
-                  <button onClick={()=>{ setCustomText(''); setGeneratedText(''); setBlanks({}); setView('edit'); }}>Zurück</button>
-                </div>
-                {generatedText ? <LueckentextBlock text={generatedText} blanks={blanks} onCheck={res=>alert(`Ergebnis ${res.correct}/${res.total}`)} /> : <div className='muted'>Kein Text generiert.</div>}
-                <div style={{marginTop:12}}>
-                  <h4>Oder: eigenen Text schreiben</h4>
-                  <p className='muted'>Markiere türkische Wörter mit {{wort}} — z. B. Ich sehe {{merhaba}} am Strand.</p>
-                  <textarea value={customText} onChange={e=>setCustomText(e.target.value)} style={{width:'100%',minHeight:80}} />
-                  <div style={{marginTop:8}}><button className='btnPrimary' onClick={parseCustomToBlanks}>Aus Text Lückentext machen</button></div>
-                </div>
-              </div>
-            )}
-
-            {view==='history' && (
-              <div>
-                <h3>Historische Lern-Einheiten</h3>
-                <div style={{marginTop:8}}>
-                  {history.length===0 && <div className='muted'>Keine Einträge.</div>}
-                  {history.map(h=>(
-                    <div key={h.id} style={{padding:8,border:'1px solid #eef2f6',borderRadius:8, marginBottom:8, display:'flex', justifyContent:'space-between'}}>
-                      <div>
-                        <div><strong>{h.type}</strong> <span className='muted'>— {new Date(h.time).toLocaleString()}</span></div>
-                        <pre style={{margin:6,fontSize:12,whiteSpace:'pre-wrap'}}>{JSON.stringify(h.detail)}</pre>
-                      </div>
-                      <div className='muted'>{new Date(h.time).toLocaleTimeString()}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{marginTop:10,display:'flex',gap:8}}>
-                  <button onClick={()=>clearHistory()}>History löschen</button>
-                  <button onClick={()=>setView('study')}>Zurück</button>
-                </div>
-              </div>
-            )}
-
-          </div>
-
-        </div>
-      );
+    } else {
+      setMessage(`"${name}" stimmt nicht — probier's nochmal. Tipp: gib 'Tanzen' ein, wenn du das Editor-Portal suchst.`);
     }
+  }
 
-    // Mount
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-  </script>
-</body>
-</html>
+  function logout() { setNameInput(""); setGate('lock'); setMessage(''); setCurrentUnitId(null); setCelebrate(false); setLueckentextUser({}); }
+
+  // Portal actions
+  function editorAddWord() {
+    const t = (editorTurkish||'').trim(); const g = (editorGerman||'').trim(); if (!t||!g) return;
+    setEditorWords(w => [...w, { t,g }]); setEditorTurkish(''); setEditorGerman('');
+  }
+  function editorRemoveWord(i){ setEditorWords(w => w.filter((_,idx)=>idx!==i)); }
+  function editorAutoGenerateLueckentext(){
+    if (editorWords.length === 0) return alert('Keine Wörter im Editor.');
+    const words = editorWords.map(x=>x.t);
+    const phrases = ['Heute denke ich an','Im Park höre ich','Abends sitze ich bei','Am Morgen rieche ich'];
+    const pick = Math.min(4, words.length);
+    const picked = shuffle(words).slice(0,pick);
+    const sentences = picked.map((w,i)=>`${phrases[i%phrases.length]} ${w}.`);
+    let text = sentences.join(' ');
+    const mapping = {};
+    picked.forEach((w,i)=>{ const token = `__[${i+1}]__`; text = text.replace(w, token); mapping[i+1]=w; });
+    setEditorLueckentext(text); setEditorBlanks(mapping);
+  }
+  function editorParseCustomToBlanks(){
+    const regex = /{{\s*([^}]+?)\s*}}/g; let m; let i=1; let newText = editorLueckentext; const map = {};
+    while((m = regex.exec(editorLueckentext)) !== null){ map[i]=m[1]; newText = newText.replace(m[0], `__[${i}]__`); i++; }
+    if(Object.keys(map).length===0) return alert('Keine {{...}} gefunden.');
+    setEditorLueckentext(newText); setEditorBlanks(map);
+  }
+  function editorSaveDraft(){
+    const draft = { id: `u-${Date.now()}`, name: editorUnitName||'Einheit-Entwurf', words: editorWords, lueckentext: editorLueckentext, blanks: editorBlanks, published:false, createdAt: new Date().toISOString(), completedAt: null };
+    setUnits(prev => { addHistory('unit:draft_save',{id:draft.id,name:draft.name,words:draft.words.length}); return [draft, ...prev.filter(u=>u.published)]; });
+    alert('Entwurf gespeichert.');
+  }
+  function editorPublishUnit(){
+    if(editorWords.length===0) return alert('Bitte Wörter hinzufügen.');
+    const unit = { id: `u-${Date.now()}`, name: editorUnitName||'Einheit', words: editorWords, lueckentext: editorLueckentext, blanks: editorBlanks, published:true, createdAt: new Date().toISOString(), completedAt: null };
+    setUnits(prev => { addHistory('unit:publish',{id:unit.id,name:unit.name,words:unit.words.length}); return [unit, ...prev.filter(u=>u.published)]; });
+    alert('Einheit veröffentlicht — erscheint nun für Benita.');
+  }
+
+  // Student actions
+  function studentSelectUnit(id){ setCurrentUnitId(id); setLueckentextUser({}); setCelebrate(false); }
+  function studentCheckLueckentext(){
+    const u = units.find(x=>x.id===currentUnitId) || units.filter(x=>x.published)[0]; if(!u) return;
+    const blanksMap = u.blanks||{}; let correct=0; const total = Object.keys(blanksMap).length;
+    for(const k of Object.keys(blanksMap)){ const expected=(blanksMap[k]||'').toLowerCase(); const got=(lueckentextUser[k]||'').trim().toLowerCase(); if(expected===got) correct++; }
+    addHistory('student:lueckentext_check',{unitId:u.id,correct,total});
+    if(correct===total){ setCelebrate(true); setUnits(prev => prev.map(p => p.id===u.id ? {...p, completedAt:new Date().toISOString()} : p)); addHistory('student:unit_completed',{unitId:u.id}); }
+    else alert(`Du hast ${correct} von ${total} richtig. Versuch's nochmal!`);
+  }
+
+  function shuffle(arr){ return arr.slice().sort(()=>Math.random()-0.5); }
+
+  // Render: gate
+  if (gate === 'lock'){
+    return (
+      <div style={{maxWidth:900,margin:'24px auto',padding:18}}>
+        <div style={{padding:18,background:'#fff',borderRadius:10}}>
+          <h1>Türkisch — Zugang</h1>
+          <form onSubmit={submitName} style={{marginTop:12}}>
+            <input placeholder="Name (Benita oder Tanzen)" value={nameInput} onChange={e=>setNameInput(e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid #ddd'}} />
+            <div style={{marginTop:10,display:'flex',gap:8}}>
+              <button className='btnPrimary' type='submit'>Weiter</button>
+              <button type='button' onClick={()=>{ setNameInput('Benita'); submitName({preventDefault: ()=>{}}); }}>Demo Benita</button>
+            </div>
+            {message && <div style={{marginTop:12,color:'#9b1c1c'}}>{message}</div>}
+            <p style={{marginTop:10,color:'#666'}}>Editor-Portal ist geheim — zugänglich über den Namen "Tanzen".</p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Portal (Tanzen) — hidden editor
+  if (gate === 'portal'){
+    return (
+      <div style={{maxWidth:1000,margin:'18px auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <h1>Portal — Einheiten erstellen (geheim)</h1>
+          <div style={{display:'flex',gap:8}}><button onClick={logout}>Logout</button></div>
+        </div>
+        <div style={{marginTop:12,padding:16,background:'#fff',borderRadius:10}}>
+          <label>Einheitsname</label>
+          <input value={editorUnitName} onChange={e=>setEditorUnitName(e.target.value)} style={{width:'100%',padding:8,borderRadius:6,border:'1px solid #ddd'}} />
+          <h3 style={{marginTop:12}}>Wörter</h3>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <input placeholder='Türkisch' value={editorTurkish} onChange={e=>setEditorTurkish(e.target.value)} />
+            <input placeholder='Deutsch' value={editorGerman} onChange={e=>setEditorGerman(e.target.value)} />
+          </div>
+          <div style={{marginTop:8,display:'flex',gap:8}}>
+            <button onClick={editorAddWord}>Hinzufügen</button>
+            <button onClick={()=>setEditorWords([])}>Alle löschen</button>
+            <button onClick={editorAutoGenerateLueckentext}>Lückentext auto</button>
+            <button onClick={editorParseCustomToBlanks}>Text -> Lücken</button>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4>Aktuelle Wörter ({editorWords.length})</h4>
+            <ul style={{padding:0}}>{editorWords.map((w,i)=>(<li key={i} style={{listStyle:'none',padding:6,borderBottom:'1px solid #eee',display:'flex',justifyContent:'space-between'}}>{w.t} — {w.g} <button onClick={()=>editorRemoveWord(i)}>Löschen</button></li>))}</ul>
+          </div>
+
+          <div style={{marginTop:12}}>
+            <h4>Lückentext-Vorschau</h4>
+            <textarea value={editorLueckentext} onChange={e=>setEditorLueckentext(e.target.value)} style={{width:'100%',minHeight:80}} />
+            <div style={{marginTop:8,display:'flex',gap:8}}>
+              <button onClick={editorSaveDraft}>Entwurf speichern</button>
+              <button onClick={()=>{ if(!editorWords.length) return alert('Keine Wörter'); if(!editorLueckentext) return alert('Kein Lückentext'); editorPublishUnit(); }}>Als Einheit veröffentlichen</button>
+            </div>
+          </div>
+
+          <div style={{marginTop:18}}>
+            <h4>Veröffentlichte Einheiten</h4>
+            {units.filter(u=>u.published).length===0 && <div style={{color:'#666'}}>Keine veröffentlichten Einheiten.</div>}
+            {units.filter(u=>u.published).map(u=>(<div key={u.id} style={{padding:8,border:'1px solid #eee',borderRadius:6,marginTop:8}}><div style={{display:'flex',justifyContent:'space-between'}}><strong>{u.name}</strong><span style={{color:'#666'}}>{new Date(u.createdAt).toLocaleString()}</span></div><div style={{marginTop:6}}>Wörter: {u.words.length} — {u.lueckentext ? 'Lückentext vorhanden' : 'kein Lückentext'}</div></div>))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Student (Benita) — show latest published unit only
+  if (gate === 'student'){
+    const published = units.filter(u=>u.published).sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
+    const unit = published.find(u=>u.id===currentUnitId) || published[0] || null;
+    return (
+      <div style={{maxWidth:900,margin:'18px auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <h1>Hallo Benita — deine heutige Einheit</h1>
+          <div style={{display:'flex',gap:8}}><button onClick={logout}>Logout</button><button onClick={()=>{ const p=units.filter(u=>u.published); if(p.length) setCurrentUnitId(p[0].id); }}>Neu laden</button></div>
+        </div>
+        {!unit && <div style={{marginTop:12,padding:12,background:'#fff',borderRadius:8}}>Es ist noch keine Einheit veröffentlicht. Bitte frag "Tanzen" danach ❤️</div>}
+        {unit && (
+          <div style={{marginTop:12,background:'#fff',padding:16,borderRadius:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div><h2 style={{margin:0}}>{unit.name}</h2><div style={{color:'#666'}}>{new Date(unit.createdAt).toLocaleString()}</div></div>
+              <div style={{textAlign:'right'}}>{unit.completedAt ? <div style={{color:'#0b9f6b'}}>Schon abgeschlossen: {new Date(unit.completedAt).toLocaleString()}</div> : <div style={{color:'#666'}}>Noch nicht abgeschlossen</div>}</div>
+            </div>
+            <div style={{marginTop:12}}>
+              <h4>Wörter (heute)</h4>
+              <ul>{unit.words.map((w,i)=>(<li key={i}>{w.t} — {w.g}</li>))}</ul>
+            </div>
+            <div style={{marginTop:12}}>
+              <h4>Lückentext</h4>
+              {unit.lueckentext ? (
+                <div>{unit.lueckentext.split(/(__\[\d+\]__)/g).filter(Boolean).map((pc,idx)=>{ const m = pc.match(/__\[(\d+)\]__/); if(m){ const id=m[1]; return <input key={idx} placeholder={`[${id}]`} value={lueckentextUser[id]||''} onChange={(e)=>setLueckentextUser(u=>({...u,[id]:e.target.value}))} style={{marginRight:6,marginBottom:6}} /> } return <span key={idx} style={{marginRight:6}}>{pc}</span> })}<div style={{marginTop:8}}><button className='btnPrimary' onClick={studentCheckLueckentext}>Absenden</button></div></div>
+              ) : <div style={{color:'#666'}}>Kein Lückentext für diese Einheit vorhanden.</div>}
+            </div>
+            {celebrate && (<div style={{marginTop:14,padding:12,borderRadius:8,background:'#fff7ed',border:'1px solid #ffecd1'}}><h3 style={{margin:0}}>🎉 Gut gemacht, Benita!</h3><p style={{marginTop:6}}>Du hast die heutige Einheit abgeschlossen — großartig. Ein Küsschen: 😘</p></div>)}
+          </div>
+        )}
+        <div style={{marginTop:12}}>
+          <h4>Historie</h4>
+          {history.length===0 && <div style={{color:'#666'}}>Keine Aktionen gespeichert.</div>}
+          {history.slice(0,10).map(h=>(<div key={h.id} style={{padding:8,border:'1px solid #eee',borderRadius:6,marginTop:8}}><div><strong>{h.type}</strong> <span style={{color:'#666'}}>— {new Date(h.time).toLocaleString()}</span></div><pre style={{whiteSpace:'pre-wrap',margin:6}}>{JSON.stringify(h.detail)}</pre></div>))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
