@@ -1,0 +1,383 @@
+import React, { useState, useEffect } from "react";
+
+// Single-file React component for a small Turkish learning flow.
+// Default export a component that can be dropped into a Vite/CRA app.
+// Styling uses Tailwind CSS utility classes (no imports required here).
+
+export default function TurkishLearner() {
+  const [pairs, setPairs] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("tl_pairs")) || [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [turkishInput, setTurkishInput] = useState("");
+  const [germanInput, setGermanInput] = useState("");
+  const [step, setStep] = useState(0); // 0 = edit, 1 = study, 2 = recall quiz, 3 = lueckentext
+
+  // Quiz state
+  const [quizOrder, setQuizOrder] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [results, setResults] = useState(null);
+
+  // Lückentext state
+  const [generatedText, setGeneratedText] = useState("");
+  const [blanks, setBlanks] = useState({});
+  const [customText, setCustomText] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("tl_pairs", JSON.stringify(pairs));
+  }, [pairs]);
+
+  function addPair() {
+    const t = turkishInput.trim();
+    const g = germanInput.trim();
+    if (!t || !g) return;
+    if (pairs.length >= 20) return; // safety
+    setPairs((p) => [...p, { t, g }]);
+    setTurkishInput("");
+    setGermanInput("");
+  }
+
+  function removePair(i) {
+    setPairs((p) => p.filter((_, idx) => idx !== i));
+  }
+
+  function startStudy() {
+    setStep(1);
+    setResults(null);
+  }
+
+  function startQuiz() {
+    if (pairs.length === 0) return;
+    const order = pairs.map((_, i) => i).sort(() => Math.random() - 0.5);
+    setQuizOrder(order);
+    setAnswers({});
+    setResults(null);
+    setStep(2);
+  }
+
+  function submitQuiz() {
+    const res = { correct: 0, total: quizOrder.length, detail: [] };
+    quizOrder.forEach((idx) => {
+      const expected = pairs[idx].t.toLowerCase();
+      const got = (answers[idx] || "").trim().toLowerCase();
+      const ok = normalize(expected) === normalize(got);
+      if (ok) res.correct++;
+      res.detail.push({ idx, expected: pairs[idx].t, got, ok });
+    });
+    setResults(res);
+  }
+
+  function normalize(s) {
+    // rudimentary normalization: collapse whitespace
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  function autoGenerateLueckentext() {
+    // Build a short 3-4 sentence paragraph mixing German phrases and chosen Turkish words
+    if (pairs.length === 0) return;
+    const words = pairs.map((p) => p.t);
+    const germanFragments = [
+      "Wir sind im Urlaub und",
+      "Am Abend sitze ich am Fenster,",
+      "Du lachst leise,",
+      "Und ich denke an",
+      "Diese Erinnerung bleibt wie",
+      "Im Morgenlicht fühle ich",
+    ];
+    // pick 4 turkish words (or fewer) randomly
+    const pickCount = Math.min(4, words.length);
+    const picked = shuffle([...words]).slice(0, pickCount);
+    // build sentences by interleaving
+    let sentences = [];
+    for (let i = 0; i < picked.length; i++) {
+      const frag = germanFragments[i % germanFragments.length];
+      sentences.push(`${frag} ${picked[i]}.`);
+    }
+    const paragraph = sentences.join(" ");
+    // replace turkish words with blanks like __[1]__ and store mapping
+    const mapping = {};
+    let textWithBlanks = paragraph;
+    picked.forEach((w, i) => {
+      const token = `__[${i + 1}]__`;
+      // use RegExp to replace first occurrence
+      textWithBlanks = textWithBlanks.replace(w, token);
+      mapping[i + 1] = w;
+    });
+    setGeneratedText(textWithBlanks);
+    setBlanks(mapping);
+    setStep(3);
+  }
+
+  function shuffle(arr) {
+    return arr.slice().sort(() => Math.random() - 0.5);
+  }
+
+  function checkBlanks(userInputs) {
+    const detail = [];
+    let correct = 0;
+    for (const k of Object.keys(blanks)) {
+      const num = Number(k);
+      const expected = blanks[num].toLowerCase();
+      const got = (userInputs[num] || "").trim().toLowerCase();
+      const ok = normalize(expected) === normalize(got);
+      if (ok) correct++;
+      detail.push({ pos: num, expected: blanks[num], got, ok });
+    }
+    return { correct, total: Object.keys(blanks).length, detail };
+  }
+
+  function exportPairs() {
+    const payload = JSON.stringify(pairs, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "turkish_pairs.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importPairs(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        if (Array.isArray(data)) setPairs(data.slice(0, 50));
+      } catch (err) {
+        alert("Fehler beim Einlesen der Datei");
+      }
+    };
+    reader.readAsText(f);
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-2xl font-semibold mb-4">Türkisch Lernplattform — Prototyp</h1>
+
+      <div className="mb-6">
+        <div className="flex gap-2 mb-2">
+          <button
+            className={`px-3 py-1 rounded ${step === 0 ? "bg-slate-700 text-white" : "bg-slate-100"}`}
+            onClick={() => setStep(0)}
+          >
+            Editieren
+          </button>
+          <button
+            className={`px-3 py-1 rounded ${step === 1 ? "bg-slate-700 text-white" : "bg-slate-100"}`}
+            onClick={startStudy}
+          >
+            Lernen
+          </button>
+          <button
+            className={`px-3 py-1 rounded ${step === 2 ? "bg-slate-700 text-white" : "bg-slate-100"}`}
+            onClick={startQuiz}
+          >
+            Abfrage
+          </button>
+          <button
+            className={`px-3 py-1 rounded ${step === 3 ? "bg-slate-700 text-white" : "bg-slate-100"}`}
+            onClick={autoGenerateLueckentext}
+          >
+            Lückentext (Auto)
+          </button>
+        </div>
+      </div>
+
+      {step === 0 && (
+        <section className="bg-white p-4 rounded shadow-sm">
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            <input
+              placeholder="Türkisch (z.B. merhaba)"
+              value={turkishInput}
+              onChange={(e) => setTurkishInput(e.target.value)}
+              className="p-2 border rounded"
+            />
+            <input
+              placeholder="Deutsch (z.B. Hallo)"
+              value={germanInput}
+              onChange={(e) => setGermanInput(e.target.value)}
+              className="p-2 border rounded"
+            />
+          </div>
+          <div className="flex gap-2 mb-4">
+            <button onClick={addPair} className="px-3 py-1 rounded bg-slate-800 text-white">Hinzufügen</button>
+            <button onClick={() => { setPairs([]); }} className="px-3 py-1 rounded bg-red-100">Alle löschen</button>
+            <button onClick={exportPairs} className="px-3 py-1 rounded bg-emerald-100">Export</button>
+            <label className="px-3 py-1 rounded bg-yellow-100 cursor-pointer">
+              Import
+              <input type="file" accept="application/json" onChange={importPairs} className="hidden" />
+            </label>
+          </div>
+
+          <div>
+            <h3 className="font-medium mb-2">Wortliste ({pairs.length})</h3>
+            <ul className="space-y-2">
+              {pairs.map((p, i) => (
+                <li key={i} className="flex justify-between items-center p-2 border rounded">
+                  <div>
+                    <span className="font-semibold">{p.t}</span>
+                    <span className="text-slate-500 ml-2">— {p.g}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => navigator.clipboard?.writeText(p.t)} className="text-sm px-2 rounded bg-slate-100">Kopieren</button>
+                    <button onClick={() => removePair(i)} className="text-sm px-2 rounded bg-red-100">Löschen</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-slate-500 mt-3">Hinweis: Lokaler Speicher wird verwendet. Du kannst die Liste exportieren/importieren.</p>
+          </div>
+        </section>
+      )}
+
+      {step === 1 && (
+        <section className="bg-white p-4 rounded shadow-sm">
+          <h2 className="font-medium mb-2">Lerne die Liste</h2>
+          <p className="text-sm text-slate-600 mb-3">Lies die Paare durch und klicke "Abfrage" wenn du bereit bist.</p>
+          <ul className="grid sm:grid-cols-2 gap-2">
+            {pairs.map((p, i) => (
+              <li key={i} className="p-2 border rounded">{p.t} — {p.g}</li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <button onClick={startQuiz} className="px-3 py-1 rounded bg-sky-600 text-white">Starte Abfrage</button>
+          </div>
+        </section>
+      )}
+
+      {step === 2 && (
+        <section className="bg-white p-4 rounded shadow-sm">
+          <h2 className="font-medium mb-2">Abfrage — schreibe das Türkische Wort</h2>
+          <p className="text-sm text-slate-600 mb-3">Gib die türkische Übersetzung für das deutsche Wort ein.</p>
+
+          <div className="space-y-3">
+            {quizOrder.map((idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <div className="w-48">{pairs[idx].g}</div>
+                <input
+                  className="flex-1 p-2 border rounded"
+                  value={answers[idx] || ""}
+                  onChange={(e) => setAnswers((a) => ({ ...a, [idx]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={submitQuiz} className="px-3 py-1 rounded bg-emerald-600 text-white">Prüfen</button>
+            <button onClick={() => { setStep(1); setResults(null); }} className="px-3 py-1 rounded bg-slate-100">Zurück</button>
+          </div>
+
+          {results && (
+            <div className="mt-4 p-3 border rounded">
+              <div>Ergebnis: {results.correct} / {results.total}</div>
+              <ul className="mt-2 space-y-1">
+                {results.detail.map((d, i) => (
+                  <li key={i} className={`p-1 rounded ${d.ok ? "bg-emerald-50" : "bg-red-50"}`}>
+                    <strong>{pairs[d.idx].g}</strong> — Erwartet: {d.expected} | Du: {d.got} {d.ok ? "✅" : "❌"}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+      {step === 3 && (
+        <section className="bg-white p-4 rounded shadow-sm">
+          <h2 className="font-medium mb-2">Lückentext</h2>
+          <div className="mb-3">
+            <button onClick={autoGenerateLueckentext} className="px-3 py-1 rounded bg-slate-200">Neu generieren</button>
+            <button onClick={() => { setCustomText(""); setBlanks({}); setGeneratedText(""); setStep(0); }} className="px-3 py-1 rounded bg-slate-100">Zurück</button>
+          </div>
+
+          {generatedText ? (
+            <LueckentextBlock text={generatedText} blanks={blanks} onCheck={(res) => alert(`Ergebnis ${res.correct}/${res.total}`)} />
+          ) : (
+            <div className="text-slate-500">Kein Text generiert.</div>
+          )}
+
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Oder: eigenen Text schreiben</h3>
+            <p className="text-sm text-slate-600 mb-2">Schreibe einen Text und markiere die türkischen Wörter mit doppelten geschweiften Klammern, z. B. "Ich sehe {{merhaba}} am Strand."</p>
+            <textarea value={customText} onChange={(e) => setCustomText(e.target.value)} className="w-full p-2 border rounded h-28" />
+            <div className="mt-2 flex gap-2">
+              <button onClick={() => {
+                // parse custom text and build blanks
+                const regex = /{{\s*([^}]+?)\s*}}/g;
+                const map = {};
+                let m; let i = 1;
+                let newText = customText;
+                while ((m = regex.exec(customText)) !== null) {
+                  map[i] = m[1];
+                  newText = newText.replace(m[0], `__[${i}]__`);
+                  i++;
+                }
+                if (Object.keys(map).length === 0) {
+                  alert('Keine Platzhalter {{...}} gefunden.');
+                  return;
+                }
+                setGeneratedText(newText);
+                setBlanks(map);
+                setStep(3);
+              }} className="px-3 py-1 rounded bg-sky-600 text-white">Aus Text Lückentext machen</button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <footer className="mt-6 text-sm text-slate-500">Prototype — wenn du möchtest, exportiere die Wortliste und schick sie mir oder sag mir, welche Features du willst (z. B. Audio, Drag+Drop, mehr Übungen).</footer>
+    </div>
+  );
+}
+
+function LueckentextBlock({ text, blanks, onCheck }) {
+  const [user, setUser] = useState({});
+
+  function handleChange(i, val) {
+    setUser((u) => ({ ...u, [i]: val }));
+  }
+
+  function doCheck() {
+    const res = { correct: 0, total: Object.keys(blanks).length };
+    for (const k of Object.keys(blanks)) {
+      if ((user[k] || "").trim().toLowerCase() === (blanks[k] || "").trim().toLowerCase()) res.correct++;
+    }
+    onCheck(res);
+  }
+
+  // render text with blanks
+  const pieces = text.split(/(__\[\d+\]__)/g).filter(Boolean);
+
+  return (
+    <div>
+      <p className="p-3 border rounded bg-slate-50">
+        {pieces.map((pc, i) => {
+          const m = pc.match(/__\[(\d+)\]__/);
+          if (m) {
+            const id = m[1];
+            return (
+              <span key={i} className="inline-flex items-center mr-1">
+                <input
+                  value={user[id] || ""}
+                  onChange={(e) => handleChange(id, e.target.value)}
+                  className="w-32 p-1 border rounded mr-1"
+                  placeholder={`[${id}]`}
+                />
+              </span>
+            );
+          }
+          return <span key={i}>{pc} </span>;
+        })}
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button onClick={doCheck} className="px-3 py-1 rounded bg-emerald-600 text-white">Prüfen</button>
+      </div>
+    </div>
+  );
+}
