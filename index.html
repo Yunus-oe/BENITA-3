@@ -3,16 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Türkisch — Portal & Benita (Drag&Drop + Touch-Fallback)</title>
+  <title>Türkisch — Portal & Benita (final)</title>
   <style>
     :root{--bg:#f6fbfc;--card:#fff;--muted:#6b7280;--accent:#0ea5a4}
-    body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:#111;padding:18px}
+    html,body{height:100%}
+    body{font-family:Inter,system-ui,Arial,Helvetica,sans-serif;margin:0;background:var(--bg);color:#111;padding:18px}
     .wrap{max-width:1100px;margin:0 auto}
     .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,0.06)}
     header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
     h1{font-size:20px;margin:0}
     button{padding:8px 12px;border-radius:10px;border:1px solid #e6eef0;background:#f3f6f7;cursor:pointer}
     .btnPrimary{background:var(--accent);color:white;border:none}
+    .btnDanger{background:#fee2e2;color:#7f1d1d;border:none}
     input,textarea{padding:8px;border-radius:10px;border:1px solid #e6eef0;width:100%;box-sizing:border-box}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     ul{padding-left:18px;margin:0}
@@ -23,6 +25,7 @@
     .blank.hover{border-color:#0ea5a4;background:#f0fdfa}
     .blank.filled{background:#eef6f2}
     .listItem{padding:10px;border-radius:8px;border:1px solid #eef2f6;display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:13px}
     @media(max-width:820px){ .grid2{grid-template-columns:1fr} header{flex-direction:column;align-items:flex-start} }
   </style>
 </head>
@@ -31,6 +34,7 @@
     <div id="root"></div>
   </div>
 
+  <!-- React UMD + Babel for quick prototype (works on GitHub Pages) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -39,24 +43,25 @@
   const { useState, useEffect } = React;
 
   function App(){
-    const UNITS_KEY = "tl_units_v2_dd";
+    const UNITS_KEY = "tl_units_v2_final";
     const HEART_KEY = "tl_heart_scale_v1";
 
     const [units, setUnits] = useState(() => {
       try { return JSON.parse(localStorage.getItem(UNITS_KEY)) || []; } catch { return []; }
     });
 
+    // gate
     const [nameInput, setNameInput] = useState("");
     const [gate, setGate] = useState("lock"); // lock | portal | student
     const [message, setMessage] = useState("");
 
-    // editor
+    // portal editor
     const [editorUnitName, setEditorUnitName] = useState("Einheit 1");
     const [editorWords, setEditorWords] = useState([]); // [{t,g}]
     const [editorTurkish, setEditorTurkish] = useState("");
     const [editorGerman, setEditorGerman] = useState("");
     const [editorLueckentext, setEditorLueckentext] = useState("");
-    const [editorBlanks, setEditorBlanks] = useState({}); // {1: 'merhaba'}
+    const [editorBlanks, setEditorBlanks] = useState({}); // {1:'merhaba'}
 
     // student
     const [currentUnitId, setCurrentUnitId] = useState(null);
@@ -64,9 +69,9 @@
     const [celebrate, setCelebrate] = useState(false);
 
     // selection for touch/click fallback
-    const [selectedChip, setSelectedChip] = useState(null); // string of the chosen word
+    const [selectedChip, setSelectedChip] = useState(null);
 
-    // heart scale
+    // heart
     const [heartScale, setHeartScale] = useState(() => {
       const v = parseFloat(localStorage.getItem(HEART_KEY));
       return isNaN(v) ? 0.12 : v;
@@ -111,7 +116,7 @@
       setNameInput(""); setGate("lock"); setMessage(""); setCurrentUnitId(null); setCelebrate(false); setPlacements({}); setSelectedChip(null);
     }
 
-    // editor actions
+    // portal actions
     function editorAddWord(){
       const t = (editorTurkish||"").trim(), g = (editorGerman||"").trim();
       if(!t || !g) return;
@@ -164,22 +169,13 @@
       setEditorLueckentext(text); setEditorBlanks(mapping);
     }
 
-    // drag handlers (robust) + touch/click fallback
+    // drag & touch fallback
     function onDragStart(ev, word){
-      try {
-        ev.dataTransfer.setData('text/plain', word);
-        ev.dataTransfer.effectAllowed = 'move';
-      } catch(e){}
-      // clear selection when starting drag
+      try { ev.dataTransfer.setData('text/plain', word); ev.dataTransfer.effectAllowed = 'move'; } catch(_) {}
       setSelectedChip(null);
     }
-    function onDragEnd(ev){
-      // cleanup if needed
-    }
-    function onAllowDrop(ev){
-      ev.preventDefault();
-      try { ev.dataTransfer.dropEffect = 'move'; } catch(_) {}
-    }
+    function onDragEnd(ev){}
+    function onAllowDrop(ev){ ev.preventDefault(); try { ev.dataTransfer.dropEffect = 'move'; } catch(_) {} }
     function onDropBlank(ev, blankId){
       ev.preventDefault();
       const word = ev.dataTransfer.getData('text/plain') || ev.dataTransfer.getData('Text') || '';
@@ -189,16 +185,13 @@
       }
     }
 
-    // click/touch fallback:
-    // tap a chip => selects it (highlight). tap a blank => places it there.
+    // click/touch fallback
     function chipSelect(word){
-      // if same chip tapped twice => deselect
       setSelectedChip(s => s === word ? null : word);
     }
     function blankClickPlace(blankId){
-      if(!selectedChip) return; // nothing selected
+      if(!selectedChip) return;
       setPlacements(p => ({ ...p, [blankId]: selectedChip }));
-      // optionally deselect after placing:
       setSelectedChip(null);
     }
 
@@ -223,7 +216,7 @@
       }
     }
 
-    // export/import helpers
+    // export/import
     function exportUnits(){
       const payload = JSON.stringify(units, null, 2);
       const blob = new Blob([payload],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='units.json'; a.click(); URL.revokeObjectURL(url);
@@ -233,7 +226,7 @@
       const r = new FileReader(); r.onload = ev => { try { const data = JSON.parse(ev.target.result); if(Array.isArray(data)) setUnits(data); alert('Units importiert.'); } catch { alert('Fehler beim Einlesen.'); } }; r.readAsText(f);
     }
 
-    // Render
+    // RENDER
     if(gate === "lock"){
       return (
         <div className="card" style={{maxWidth:960, margin:'18px auto'}}>
@@ -418,7 +411,6 @@
                                onClick={()=>chipSelect(word)}
                           >{word}</div>
                         ))}
-                        {/* clear selection button */}
                         <button style={{marginLeft:6}} onClick={()=>setSelectedChip(null)}>Auswahl löschen</button>
                       </div>
                     </div>
