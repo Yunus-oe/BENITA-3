@@ -3,17 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Türkisch — Portal & Benita</title>
+  <title>Türkisch — Portal & Benita (Drag&Drop Fix)</title>
   <style>
-    :root{
-      --bg:#f6fbfc;
-      --card:#ffffff;
-      --muted:#6b7280;
-      --accent:#0ea5a4;
-      --accent-2:#06b6d4;
-    }
+    :root{--bg:#f6fbfc;--card:#ffffff;--muted:#6b7280;--accent:#0ea5a4}
     html,body{height:100%}
-    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0;background:var(--bg);color:#111;padding:18px}
+    body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);color:#111;padding:18px}
     .wrap{max-width:1100px;margin:0 auto}
     .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,0.06)}
     header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
@@ -26,7 +20,7 @@
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     ul{padding-left:18px;margin:0}
     .muted{color:var(--muted);font-size:13px}
-    .chip{padding:6px 10px;border-radius:20px;background:#eef2ff;cursor:grab;border:1px solid #dbeafe}
+    .chip{padding:6px 10px;border-radius:20px;background:#eef2ff;cursor:grab;border:1px solid #dbeafe;user-select:none}
     .listItem{padding:10px;border-radius:8px;border:1px solid #eef2f6;display:flex;justify-content:space-between;align-items:center}
     .small{font-size:13px}
     @media(max-width:820px){ .grid2{grid-template-columns:1fr} header{flex-direction:column;align-items:flex-start} }
@@ -37,13 +31,12 @@
     <div id="root"></div>
   </div>
 
-  <!-- React + ReactDOM (UMD) + Babel for on-the-fly JSX transform (OK for demo/GitHub Pages) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <script type="text/babel">
-  const { useState, useEffect } = React;
+  const { useState, useEffect, useRef } = React;
 
   function App(){
     const UNITS_KEY = "tl_units_v2_dd";
@@ -53,25 +46,21 @@
       try { return JSON.parse(localStorage.getItem(UNITS_KEY)) || []; } catch { return []; }
     });
 
-    // gate
     const [nameInput, setNameInput] = useState("");
     const [gate, setGate] = useState("lock"); // lock | portal | student
     const [message, setMessage] = useState("");
 
-    // portal editor
     const [editorUnitName, setEditorUnitName] = useState("Einheit 1");
     const [editorWords, setEditorWords] = useState([]); // [{t,g}]
     const [editorTurkish, setEditorTurkish] = useState("");
     const [editorGerman, setEditorGerman] = useState("");
     const [editorLueckentext, setEditorLueckentext] = useState("");
-    const [editorBlanks, setEditorBlanks] = useState({}); // {1:'merhaba'}
+    const [editorBlanks, setEditorBlanks] = useState({});
 
-    // student
     const [currentUnitId, setCurrentUnitId] = useState(null);
     const [placements, setPlacements] = useState({}); // {blankId: word}
     const [celebrate, setCelebrate] = useState(false);
 
-    // heart
     const [heartScale, setHeartScale] = useState(() => {
       const v = parseFloat(localStorage.getItem(HEART_KEY));
       return isNaN(v) ? 0.12 : v;
@@ -80,11 +69,10 @@
     useEffect(()=>{ localStorage.setItem(UNITS_KEY, JSON.stringify(units)); }, [units]);
     useEffect(()=>{ localStorage.setItem(HEART_KEY, String(heartScale)); }, [heartScale]);
 
-    // helpers
     function shuffle(a){ return a.slice().sort(()=>Math.random()-0.5); }
     function nextBlankIndex(map){ const keys = Object.keys(map).map(Number); return keys.length ? Math.max(...keys)+1 : 1; }
 
-    // login
+    // --- Login ---
     function submitName(e){
       e && e.preventDefault();
       const name = (nameInput||"").trim();
@@ -116,7 +104,7 @@
       setNameInput(""); setGate("lock"); setMessage(""); setCurrentUnitId(null); setCelebrate(false); setPlacements({});
     }
 
-    // portal actions
+    // --- Portal actions ---
     function editorAddWord(){
       const t = (editorTurkish||"").trim(), g = (editorGerman||"").trim();
       if(!t || !g) return;
@@ -169,14 +157,44 @@
       setEditorLueckentext(text); setEditorBlanks(mapping);
     }
 
-    // student drag & drop
-    function onDragStart(ev, word){ ev.dataTransfer.setData('text/plain', word); }
-    function onAllowDrop(ev){ ev.preventDefault(); }
-    function onDropBlank(ev, blankId){ ev.preventDefault(); const word = ev.dataTransfer.getData('text/plain'); if(!word) return; setPlacements(p => ({ ...p, [blankId]: word })); }
+    // --- Drag & Drop robust handlers ---
+    function onDragStart(ev, word){
+      // make sure dataTransfer is set and effect allowed
+      try {
+        ev.dataTransfer.setData('text/plain', word);
+        ev.dataTransfer.effectAllowed = 'move';
+        // optional nicer drag image (use element clone)
+        if (ev.currentTarget && ev.dataTransfer.setDragImage) {
+          try {
+            // small invisible canvas to avoid default ghost
+            const crt = ev.currentTarget.cloneNode(true);
+            crt.style.position = 'absolute';
+            crt.style.top = '-9999px';
+            crt.style.left = '-9999px';
+            document.body.appendChild(crt);
+            ev.dataTransfer.setDragImage(crt, 0, 0);
+            setTimeout(()=>document.body.removeChild(crt), 0);
+          } catch (_) {}
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    function onAllowDrop(ev){
+      ev.preventDefault();
+      try { ev.dataTransfer.dropEffect = 'move'; } catch(_) {}
+    }
+    function onDropBlank(ev, blankId){
+      ev.preventDefault();
+      const word = ev.dataTransfer.getData('text/plain') || ev.dataTransfer.getData('Text') || '';
+      if(!word) return;
+      setPlacements(p => ({ ...p, [blankId]: word }));
+    }
 
+    // --- Student check ---
     function studentCheck(){
       const unit = units.find(u=>u.id===currentUnitId) || units.filter(u=>u.published)[0];
-      if(!unit) return;
+      if(!unit) return alert('Keine Einheit geladen.');
       const blanksMap = unit.blanks || {};
       let correct = 0; const total = Object.keys(blanksMap).length;
       for(const k of Object.keys(blanksMap)){
@@ -186,36 +204,24 @@
       }
       if(total > 0 && correct === total){
         setCelebrate(true);
-        // grow heart multiplicatively
-        setHeartScale(s => {
-          const next = s * 1.25;
-          return next;
-        });
-        // mark completed
+        setHeartScale(s => s * 1.25);
         setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, completedAt: new Date().toISOString() } : u));
-        setTimeout(() => alert("Perfekt — Einheit geschafft! 🎉"), 50);
+        setTimeout(()=>alert("Perfekt — Einheit geschafft! 🎉"), 50);
       } else {
         alert(`Du hast ${correct} von ${total} richtig. Versuch's nochmal.`);
       }
     }
 
-    // small import/export for units (JSON of published units)
     function exportUnits(){
       const payload = JSON.stringify(units, null, 2);
       const blob = new Blob([payload],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='units.json'; a.click(); URL.revokeObjectURL(url);
     }
     function importUnits(e){
       const f = e.target.files?.[0]; if(!f) return;
-      const r = new FileReader(); r.onload = ev => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          if(Array.isArray(data)) setUnits(data);
-          alert('Units importiert.');
-        } catch { alert('Fehler beim Einlesen.'); }
-      }; r.readAsText(f);
+      const r = new FileReader(); r.onload = ev => { try { const data = JSON.parse(ev.target.result); if(Array.isArray(data)) setUnits(data); alert('Units importiert.'); } catch { alert('Fehler beim Einlesen.'); } }; r.readAsText(f);
     }
 
-    // Render gate
+    // --- UI render ---
     if(gate === "lock"){
       return (
         <div className="card" style={{maxWidth:960, margin:'18px auto'}}>
@@ -245,7 +251,6 @@
       );
     }
 
-    // Portal (Tanzen)
     if(gate === "portal"){
       return (
         <div style={{maxWidth:1000,margin:'18px auto'}}>
@@ -314,7 +319,6 @@
       );
     }
 
-    // Student (Benita)
     if(gate === "student"){
       const published = units.filter(u=>u.published).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
       const unit = published.find(u=>u.id===currentUnitId) || published[0] || null;
@@ -357,14 +361,16 @@
 
                 {unit.lueckentext ? (
                   <>
-                    <div style={{padding:12,border:'1px dashed #dbeafe',borderRadius:8}}>
+                    <div style={{padding:12,border:'1px dashed #dbeafe',borderRadius:8,minHeight:80}}>
                       {unit.lueckentext.split(/(__\\[\\d+\\]__)/g).filter(Boolean).map((pc, idx) => {
                         const m = pc.match(/__\\[(\\d+)\\]__/);
                         if(m){
                           const id = m[1];
                           return (
-                            <span key={idx} onDrop={(e)=>onDropBlank(e,id)} onDragOver={onAllowDrop}
-                              style={{display:'inline-block',minWidth:120,padding:8,marginRight:6,marginBottom:6,border:'1px solid #ccc',borderRadius:8,background:'#fff'}}>
+                            <span key={idx}
+                              onDrop={(e)=>onDropBlank(e,id)}
+                              onDragOver={onAllowDrop}
+                              style={{display:'inline-block',minWidth:140,minHeight:36,padding:8,marginRight:6,marginBottom:6,border:'1px solid #ccc',borderRadius:8,background:'#fff',verticalAlign:'middle'}}>
                               {placements[id] ? <strong>{placements[id]}</strong> : <em className="muted">[Zieh hier {id}]</em>}
                             </span>
                           );
@@ -377,7 +383,14 @@
                       <h5>Wort-Chips</h5>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                         {shuffle(unit.words.map(w=>w.t)).map((word,i)=>(
-                          <div key={i} className="chip" draggable onDragStart={(e)=>onDragStart(e,word)}>{word}</div>
+                          <div key={i}
+                               className="chip"
+                               draggable="true"
+                               onDragStart={(e)=>onDragStart(e,word)}
+                               onTouchStart={(e)=>{ /* mobile fallback: copy to clipboard so user can long-press paste */ }}
+                               role="button"
+                               aria-grabbed="false"
+                          >{word}</div>
                         ))}
                       </div>
                     </div>
